@@ -1,0 +1,18 @@
+# Copy this file to `.dev.vars` (gitignored) and fill in real values for local
+# development. In production these are set with `wrangler secret put <NAME>`.
+
+# Random long string used to sign session cookies, e.g. `openssl rand -hex 32`
+SESSION_SECRET=
+
+# Comma-separated list of Google account emails allowed to log in
+ALLOWED_EMAILS=arthurgaierarias@gmail.com
+
+# From a Google Cloud OAuth Client ID (Web application type)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# From console.anthropic.com (production)
+ANTHROPIC_API_KEY=
+
+# From console.groq.com (free-tier alternative used by lib/extract.ts)
+GROQ_API_KEY=

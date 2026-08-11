@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { getBaseUrl } from "../lib/request-url";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:5173";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? "http";
-  const baseUrl = `${protocol}://${host}`;
+  const baseUrl = await getBaseUrl();
   const title = "Clínica Visão | Acompanhamento diário";
   const description = "Painel de evolução diária e próximos passos clínicos.";
   return {
