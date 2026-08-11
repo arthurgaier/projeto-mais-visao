@@ -1,14 +1,74 @@
-# vinext-starter
+# Clínica Visão
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Painel de acompanhamento clínico para médicos que registram a evolução dos
+pacientes em anotações de texto livre (arquivos `.docx` no Google Drive) e
+querem uma visão diária organizada, sem precisar preencher planilhas ou
+sistemas complexos manualmente.
 
-## Prerequisites
+## A ideia
+
+No dia a dia, o médico escreve uma anotação narrativa sobre cada paciente
+("hoje o paciente relatou melhora na dor, pressão em 130x80, retorno marcado
+para quinta") e salva como um arquivo `.docx` numa pasta do Google Drive — um
+arquivo por paciente.
+
+O Clínica Visão:
+
+1. Lê os arquivos `.docx` dessa pasta;
+2. Manda o texto de cada anotação para uma IA, que extrai de forma
+   estruturada o indicador clínico principal, o valor, a variação percentual
+   de melhora, a urgência (hoje / esta semana / acompanhar), um resumo e os
+   próximos passos (exames, retornos, medicações);
+3. Mostra tudo isso num dashboard: evolução por paciente, quem precisa de
+   atenção hoje, e um plano de ação com os próximos passos pendentes.
+
+Assim o médico continua escrevendo do jeito que já escreve — texto livre —
+e o painel organiza isso automaticamente a cada sincronização.
+
+Como alternativa (sem depender do Drive), também é possível importar os
+dados manualmente via planilha Excel/CSV direto no navegador.
+
+## Como funciona por baixo dos panos
+
+- **Login**: OAuth com Google (também usado para autorizar leitura do Drive).
+- **Configuração**: o médico informa o link da pasta do Drive com os
+  arquivos dos pacientes.
+- **Sincronização** (botão "Sincronizar agora"): busca só os arquivos
+  `.docx` novos ou alterados desde a última sincronização, extrai o texto e
+  chama a IA para estruturar os dados, salvando tudo num banco (Cloudflare
+  D1 via Drizzle ORM).
+- **Dashboard**: lê os dados salvos e mostra o resumo do dia, o gráfico de
+  evolução e a lista de próximos passos.
+
+## Stack
+
+- [vinext](https://github.com/cloudflare/vinext) (Next.js rodando em
+  Cloudflare Workers) + React
+- Cloudflare D1 (SQLite) com Drizzle ORM
+- OAuth do Google (login + acesso de leitura ao Drive)
+- Extração de texto via IA com tool-calling estruturado (compatível com
+  Anthropic ou Groq — ver `lib/extract.ts`)
+
+## Rodando localmente
+
+### Pré-requisitos
 
 - Node.js `>=22.13.0`
+- Uma pasta no Google Drive com arquivos `.docx` de teste
+- Um OAuth Client ID do Google Cloud Console (tipo "Aplicativo da Web"),
+  com o redirect URI `http://localhost:3000/api/auth/google/callback`
+- Uma API key de um provedor de IA com tool-calling (Groq tem tier
+  gratuito; Anthropic é a opção usada em produção)
 
-## Quick Start
+### Configuração
+
+Copie `.dev.vars.example` para `.dev.vars` e preencha os valores:
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+### Comandos
 
 ```bash
 npm install
@@ -16,85 +76,11 @@ npm run dev
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+- `npm run dev`: inicia o servidor local
+- `npm run build`: valida o build de produção
+- `npm run db:generate`: gera migrações do Drizzle após mudanças no schema
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
+## Aprenda mais
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
